@@ -79,6 +79,7 @@ target_compile_options(launchpad-test-utils PRIVATE --coverage)
 
 macro(launchpad_add_tests)
     foreach(_testname ${ARGN})
+        list(APPEND ALL_TEST_TARGETS launchpad-${_testname})
         qt_add_executable(launchpad-${_testname} ${_testname}.cpp)
         # OBJECT libs first: their symbols take precedence over launchpadcommon.so,
         # so the gcov-instrumented copies are the ones that execute at test time.
@@ -153,27 +154,13 @@ if(LCOV_BIN AND GENHTML_BIN)
                 '*/qmlcache_*.cpp'
                 '*/_autogen/*'
                 '*_json.h'
+                '*/tests/*'
                 --output-file ${COVERAGE_DIR}/coverage_filtered.info
         # 5. Generate browsable HTML report
         COMMAND ${GENHTML_BIN} ${COVERAGE_DIR}/coverage_filtered.info
                 --output-directory ${COVERAGE_DIR}/html
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        DEPENDS
-            launchpad-itemspagetest
-            launchpad-gioappinfotest
-            launchpad-searchfilterproxymodeltest
-            launchpad-countlimitproxymodeltest
-            launchpad-sortproxymodeltest
-            launchpad-freesortproxymodeltest
-            launchpad-recentlyinstalledproxymodeltest
-            launchpad-multipagesortfilterproxymodeltest
-            launchpad-categoryutilstest
-            launchpad-blurhashtest
-            launchpad-favoritedproxymodeltest
-            launchpad-frequentlyusedproxymodeltest
-            launchpad-itemarrangementproxymodeltest
-            launchpad-iconutilstest
-            launchpad-itemspagemodeltest
+        DEPENDS ${ALL_TEST_TARGETS}
         COMMENT "Running tests and generating coverage report in ${COVERAGE_DIR}"
     )
 else()
@@ -181,22 +168,7 @@ else()
     add_custom_target(run-test
         COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        DEPENDS
-            launchpad-itemspagetest
-            launchpad-gioappinfotest
-            launchpad-searchfilterproxymodeltest
-            launchpad-countlimitproxymodeltest
-            launchpad-sortproxymodeltest
-            launchpad-freesortproxymodeltest
-            launchpad-recentlyinstalledproxymodeltest
-            launchpad-multipagesortfilterproxymodeltest
-            launchpad-categoryutilstest
-            launchpad-blurhashtest
-            launchpad-favoritedproxymodeltest
-            launchpad-frequentlyusedproxymodeltest
-            launchpad-itemarrangementproxymodeltest
-            launchpad-iconutilstest
-            launchpad-itemspagemodeltest
+        DEPENDS ${ALL_TEST_TARGETS}
         COMMENT "Running tests (lcov/genhtml not found, skipping coverage report)"
     )
     if(NOT LCOV_BIN)
