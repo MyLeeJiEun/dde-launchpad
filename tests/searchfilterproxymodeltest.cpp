@@ -151,7 +151,10 @@ QStandardItem *TestSearchFilterProxyModel::createTestAppItem(const QString &desk
     auto item = new QStandardItem;
     item->setData(desktopId, SourceDesktopIdRole);
     item->setData(displayName.isEmpty() ? name : displayName, SourceNameRole);
-    item->setData(QStringLiteral("application-default-icon"), SourceIconNameRole);
+    // Empty icon name so AppMgr::waitForIcon() resolves it immediately and does
+    // not defer the row (a non-empty unresolvable icon would make the noDisplay
+    // unhide in testSharedModelAdapter() delayed, failing the rowCount check).
+    item->setData(QString(), SourceIconNameRole);
     item->setData(genericName, SourceGenericNameRole);
     item->setData(vendor, SourceVendorRole);
     item->setData(launchedTimes, SourceLaunchedTimesRole);
