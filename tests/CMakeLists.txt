@@ -6,6 +6,10 @@ find_package(Qt6 REQUIRED COMPONENTS Core Test)
 find_package(Qt6 REQUIRED COMPONENTS Gui Qml Svg)  # needed by tested-source OBJECT libs
 find_package(Qt6Core CONFIG REQUIRED Private)      # sortproxymodel.cpp uses QAbstractItemModelPrivate
 
+# Coverage tools (required by the run-test target)
+find_program(LCOV_BIN lcov)
+find_program(GENHTML_BIN genhtml)
+
 qt_standard_project_setup()
 
 # ---------------------------------------------------------------------------
@@ -53,6 +57,8 @@ target_link_libraries(launchpad-test-models PUBLIC
     Qt6::CorePrivate # sortproxymodel.cpp -> QAbstractItemModelPrivate
     ${DTK_NS}::Core  # DConfig, DFileWatcherManager, DPinyin (appsmodel.cpp, frequentlyusedproxymodel.cpp)
 )
+# Coverage instrumentation for tested source
+target_compile_options(launchpad-test-models PRIVATE --coverage)
 
 add_library(launchpad-test-utils OBJECT
     ${CMAKE_SOURCE_DIR}/src/utils/blurhash.cpp
@@ -68,6 +74,8 @@ target_link_libraries(launchpad-test-utils PUBLIC
     Qt6::Svg
     ${DTK_NS}::Gui   # DIcon, DIconTheme, DSvgRenderer (iconutils.cpp)
 )
+# Coverage instrumentation for tested source
+target_compile_options(launchpad-test-utils PRIVATE --coverage)
 
 macro(launchpad_add_tests)
     foreach(_testname ${ARGN})
@@ -82,7 +90,13 @@ macro(launchpad_add_tests)
             gio-utils          # already OBJECT; covers src/gioutils/ (e.g. gioappinfotest)
             launchpadcommon
         )
+        # Coverage instrumentation for test executables
+        target_compile_options(launchpad-${_testname} PRIVATE --coverage)
+        target_link_options(launchpad-${_testname} PRIVATE --coverage)
         add_test(NAME launchpad-${_testname} COMMAND launchpad-${_testname})
+        # Ensure `cmake --build build --target test` compiles all test executables
+        # before ctest runs them.
+        add_dependencies(test launchpad-${_testname})
     endforeach()
 endmacro()
 
@@ -103,3 +117,92 @@ launchpad_add_tests(
     iconutilstest
     itemspagemodeltest
 )
+
+# ---------------------------------------------------------------------------
+# run-test target: run all tests via ctest, then generate coverage HTML.
+#
+# Usage:
+#   cmake --build build --target run-test
+#
+# Produces:
+#   ${CMAKE_BINARY_DIR}/coverage_report/coverage.info          – raw lcov capture
+#   ${CMAKE_BINARY_DIR}/coverage_report/coverage_filtered.info – filtered lcov data
+#   ${CMAKE_BINARY_DIR}/coverage_report/html/                  – browsable HTML report
+# ---------------------------------------------------------------------------
+
+set(COVERAGE_DIR ${CMAKE_BINARY_DIR}/coverage_report)
+
+if(LCOV_BIN AND GENHTML_BIN)
+    add_custom_target(run-test
+        # 1. Run all registered tests
+        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+        # 2. Prepare output directory
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${COVERAGE_DIR}
+        # 3. Capture raw coverage data from gcov .gcda files
+        COMMAND ${LCOV_BIN} --capture
+                --directory ${CMAKE_BINARY_DIR}
+                --output-file ${COVERAGE_DIR}/coverage.info
+                --no-external
+        # 4. Filter generated / non-project code
+        COMMAND ${LCOV_BIN} --remove ${COVERAGE_DIR}/coverage.info
+                '*/moc_*.cpp'
+                '*/moc_*.h'
+                '*/qrc_*.cpp'
+                '*/ui_*.h'
+                '*/qml_*.h'
+                '*/qmlcache_*.cpp'
+                '*/_autogen/*'
+                '*_json.h'
+                --output-file ${COVERAGE_DIR}/coverage_filtered.info
+        # 5. Generate browsable HTML report
+        COMMAND ${GENHTML_BIN} ${COVERAGE_DIR}/coverage_filtered.info
+                --output-directory ${COVERAGE_DIR}/html
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        DEPENDS
+            launchpad-itemspagetest
+            launchpad-gioappinfotest
+            launchpad-searchfilterproxymodeltest
+            launchpad-countlimitproxymodeltest
+            launchpad-sortproxymodeltest
+            launchpad-freesortproxymodeltest
+            launchpad-recentlyinstalledproxymodeltest
+            launchpad-multipagesortfilterproxymodeltest
+            launchpad-categoryutilstest
+            launchpad-blurhashtest
+            launchpad-favoritedproxymodeltest
+            launchpad-frequentlyusedproxymodeltest
+            launchpad-itemarrangementproxymodeltest
+            launchpad-iconutilstest
+            launchpad-itemspagemodeltest
+        COMMENT "Running tests and generating coverage report in ${COVERAGE_DIR}"
+    )
+else()
+    # Fallback when lcov/genhtml are not installed: run ctest only
+    add_custom_target(run-test
+        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        DEPENDS
+            launchpad-itemspagetest
+            launchpad-gioappinfotest
+            launchpad-searchfilterproxymodeltest
+            launchpad-countlimitproxymodeltest
+            launchpad-sortproxymodeltest
+            launchpad-freesortproxymodeltest
+            launchpad-recentlyinstalledproxymodeltest
+            launchpad-multipagesortfilterproxymodeltest
+            launchpad-categoryutilstest
+            launchpad-blurhashtest
+            launchpad-favoritedproxymodeltest
+            launchpad-frequentlyusedproxymodeltest
+            launchpad-itemarrangementproxymodeltest
+            launchpad-iconutilstest
+            launchpad-itemspagemodeltest
+        COMMENT "Running tests (lcov/genhtml not found, skipping coverage report)"
+    )
+    if(NOT LCOV_BIN)
+        message(WARNING "lcov not found; run-test will skip coverage report generation. Install lcov for full functionality.")
+    endif()
+    if(NOT GENHTML_BIN)
+        message(WARNING "genhtml not found; run-test will skip coverage report generation. Install genhtml for full functionality.")
+    endif()
+endif()
